@@ -1,6 +1,7 @@
 import ccxt
 import os
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
@@ -21,11 +22,37 @@ FEE_BINANCE = 0.075
 FEE_BYBIT = 0.1
 
 def get_price(exchange, symbol):
+    proxies = {}
+
+    proxy_url = os.getenv("PROXY_URL")
+    if proxy_url:
+        proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+
     try:
-        ticker = exchange.fetch_ticker(symbol)
-        return ticker['last']
+        if exchange == "binance":
+            response = requests.get(
+                f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
+                proxies=proxies,
+                timeout=10
+            )
+            response.raise_for_status()
+            return float(response.json()["price"])
+        elif exchange == "bybit":
+            response = requests.get(
+                f"https://api.bybit.com/v2/public/tickers?symbol={symbol}",
+                proxies=proxies,
+                timeout=10
+            )
+            response.raise_for_status()
+            return float(response.json()["result"][0]["last_price"])
+        else:
+            print(f"Неизвестная биржа: {exchange}")
+            return None
     except Exception as e:
-        print(f"Ошибка получения цены с {exchange.id}: {e}")
+        print(f"Ошибка получения цены с {exchange}: {e}")
         return None
 
 def check_arbitrage_once():
