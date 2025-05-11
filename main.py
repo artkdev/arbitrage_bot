@@ -27,7 +27,12 @@ async def main():
     asyncio.create_task(start_web_server())
 
     await asyncio.sleep(1)
-    send_alert_with_button("✅ Bot run successfully", {})
+    send_alert_with_button("✅ Bot run successfully", {
+        "side": "test",
+        "symbol": "TEST/USDT",
+        "binance_price": 0,
+        "bybit_price": 0
+    })
 
     while True:
         opportunity = check_arbitrage_once()
