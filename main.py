@@ -26,6 +26,9 @@ async def main():
     asyncio.create_task(telegram_app())
     asyncio.create_task(start_web_server())
 
+    await asyncio.sleep(1)
+    send_alert_with_button("✅ Bot run successfully", {})
+
     while True:
         opportunity = check_arbitrage_once()
         if opportunity:
