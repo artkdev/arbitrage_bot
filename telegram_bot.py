@@ -7,6 +7,8 @@ from aiogram.filters import CommandStart
 from aiogram.utils.markdown import hbold
 from dotenv import load_dotenv
 from trading import execute_trade
+from aiogram.filters import Command
+from aiogram.types import Message
 
 load_dotenv()
 
@@ -17,6 +19,10 @@ bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 pending_actions = {}
+
+@dp.message(Command("ping"))
+async def ping_command(message: Message):
+    await message.answer("✅ Бот в сети!")
 
 def send_alert_with_button(message: str, data: dict):
     callback_data = f"approve:{data['side']}:{data['symbol']}"
