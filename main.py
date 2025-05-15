@@ -3,7 +3,7 @@ import time
 import asyncio
 from dotenv import load_dotenv
 from telegram_bot import send_alert_with_button, telegram_app
-from monitor import check_arbitrage_once
+from monitor import check_arbitrage_all
 from aiohttp import web
 
 # HTTP handler для Render
@@ -27,7 +27,8 @@ async def main():
     asyncio.create_task(start_web_server())
 
     await asyncio.sleep(1)
-    send_alert_with_button("✅ Bot run successfully", {
+
+    await send_alert_with_button("✅ Bot run successfully", {
         "side": "test",
         "symbol": "TEST/USDT",
         "binance_price": 0,
@@ -35,10 +36,15 @@ async def main():
     })
 
     while True:
-        opportunity = check_arbitrage_once()
-        if opportunity:
-            message, data = opportunity
-            send_alert_with_button(message, data)
+        print("🔄 Проверка арбитража...")
+        try:
+            opportunity = await check_arbitrage_all()
+            if opportunity:
+                message, data = opportunity
+                await send_alert_with_button(message, data)
+        except Exception as e:
+            print(f"⚠️ Ошибка в check_arbitrage_once(): {e}")
+
         await asyncio.sleep(60)
 
 if __name__ == "__main__":

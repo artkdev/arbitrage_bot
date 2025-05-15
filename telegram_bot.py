@@ -1,14 +1,12 @@
 import os
-import asyncio
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import CommandStart
-from aiogram.utils.markdown import hbold
 from dotenv import load_dotenv
 from trading import execute_trade
 from aiogram.filters import Command
 from aiogram.types import Message
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 load_dotenv()
 
@@ -24,15 +22,23 @@ pending_actions = {}
 async def ping_command(message: Message):
     await message.answer("✅ Бот в сети!")
 
-def send_alert_with_button(message: str, data: dict):
-    callback_data = f"approve:{data['side']}:{data['symbol']}"
-    pending_actions[callback_data] = data
+async def send_alert_with_button(message, data):
+    if data.get("side") == "log":
+        await bot.send_message(chat_id=TELEGRAM_USER_ID, text=message)
+        return
 
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Подтвердить сделку", callback_data=callback_data)]
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Подтвердить сделку",
+                    callback_data=f"approve:{data['side']}:{data['symbol']}"
+                )
+            ]
+        ]
+    )
 
-    asyncio.create_task(bot.send_message(chat_id=TELEGRAM_USER_ID, text=message, reply_markup=markup))
+    await bot.send_message(chat_id=TELEGRAM_USER_ID, text=message, reply_markup=keyboard)
 
 @dp.callback_query(F.data.startswith("approve:"))
 async def process_callback(callback: types.CallbackQuery):
