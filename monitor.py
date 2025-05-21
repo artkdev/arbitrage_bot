@@ -21,20 +21,14 @@ kucoin = ccxt.kucoin({
     'apiKey': os.getenv("KUCOIN_API_KEY"),
     'secret': os.getenv("KUCOIN_API_SECRET"),
 })
-
+#, "MATICUSDT"
+#, "RNDRUSDT"
+#, "FTMUSDT"
 PAIRS = [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT",
-    "XRPUSDT",
-    "ADAUSDT",
-    "DOGEUSDT",
-    "MATICUSDT",
-    "DOTUSDT",
-    "LTCUSDT",
-    "LINKUSDT",
-    "CYBERUSDT",
-    "IDUSDT"
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "TONUSDT", "DOTUSDT",
+    "TRXUSDT", "LINKUSDT", "AVAXUSDT", "LTCUSDT", "SHIBUSDT", "NEARUSDT", "UNIUSDT",
+    "APTUSDT", "FILUSDT", "SANDUSDT", "LDOUSDT", "RUNEUSDT", "FLOWUSDT",
+    "IDUSDT", "CYBERUSDT", "OPUSDT", "SUIUSDT", "PEPEUSDT"
 ]
 
 EXCHANGES = ["binance", "bybit", "kucoin"]
@@ -70,7 +64,12 @@ async def get_price(exchange, symbol):
             url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
             response = requests.get(url, proxies=proxies, timeout=10)
             response.raise_for_status()
-            data = response.json()["result"]["list"][0]
+            result = response.json().get("result")
+            if not result or "list" not in result or not result["list"]:
+                raise ValueError(f"Bybit: нет данных для {symbol}")
+
+            data = result["list"][0]
+
             return {
                 "last": float(data["lastPrice"]),
                 "bid": float(data["bid1Price"]),
@@ -149,12 +148,12 @@ async def get_price(exchange, symbol):
 #     return None
 
 async def check_arbitrage_all():
+    all_opportunities = []
+
     for pair in PAIRS:
         prices = {}
         for exchange in EXCHANGES:
             prices[exchange] = await get_price(exchange, pair)
-
-        best_opportunity = None
 
         for buy in EXCHANGES:
             for sell in EXCHANGES:
@@ -171,60 +170,59 @@ async def check_arbitrage_all():
                 fee = CAPITAL * (FEE_BINANCE + FEE_BYBIT) / 100
                 net = gross - fee
 
-                if not best_opportunity or net > best_opportunity["net"]:
-                    best_opportunity = {
-                        "pair": pair,
-                        "buy_exchange": buy,
-                        "sell_exchange": sell,
-                        "price_buy": price_buy,
-                        "price_sell": price_sell,
-                        "spread": spread,
-                        "gross": gross,
-                        "fee": fee,
-                        "net": net
-                    }
+                all_opportunities.append({
+                    "pair": pair,
+                    "buy_exchange": buy,
+                    "sell_exchange": sell,
+                    "price_buy": price_buy,
+                    "price_sell": price_sell,
+                    "spread": spread,
+                    "gross": gross,
+                    "fee": fee,
+                    "net": net
+                })
 
-        if best_opportunity:
-            await log_opportunity(
-                pair=best_opportunity["pair"],
-                exchange_buy=best_opportunity["buy_exchange"],
-                price_buy=best_opportunity["price_buy"],
-                exchange_sell=best_opportunity["sell_exchange"],
-                price_sell=best_opportunity["price_sell"],
-                spread=best_opportunity["spread"],
-                threshold=SPREAD_THRESHOLD,
-                capital=CAPITAL,
-                is_alert=(best_opportunity["spread"] >= SPREAD_THRESHOLD and best_opportunity["net"] > 0)
-            )
+    # ✅ Сортировка по убыванию спреда и вывод только 3 лучших
+    top_opportunities = sorted(all_opportunities, key=lambda x: x["spread"], reverse=True)[:3]
+
+    for opp in top_opportunities:
+        await log_opportunity(
+            pair=opp["pair"],
+            exchange_buy=opp["buy_exchange"],
+            price_buy=opp["price_buy"],
+            exchange_sell=opp["sell_exchange"],
+            price_sell=opp["price_sell"],
+            spread=opp["spread"],
+            threshold=SPREAD_THRESHOLD,
+            capital=CAPITAL,
+            is_alert=(opp["spread"] >= SPREAD_THRESHOLD or opp["spread"] > 0.25)
+        )
 
 
 
 async def log_opportunity(pair, exchange_buy, price_buy, exchange_sell, price_sell, spread, threshold, capital, is_alert=False):
     working_capital = capital / 2
-    fee_percent = FEE_BINANCE + FEE_BYBIT
+    fee_percent = get_fee_percent(exchange_buy.lower(), exchange_sell.lower())
     gross = working_capital * spread / 100
     fee = capital * fee_percent / 100
     net = gross - fee
     gap = threshold - spread
 
-    # Формат для консоли
-    print(f"\n=== Арбитраж по {pair} ===")
-    print(f"🔻 Купи на {exchange_buy} за {price_buy:.6f}")
-    print(f"🔺 Продай на {exchange_sell} за {price_sell:.6f}")
-    print(f"\n📊 Спред: {spread:.2f}%")
-    print(f"💰 Валовая прибыль: ${gross:.2f}")
-    print(f"💸 Комиссия: ${fee:.2f}")
-    if net > 0:
-        print(f"✅ Чистая прибыль: ${net:.2f}")
-    else:
-        print(f"❌ Убыток: ${net:.2f}")
-    if gap > 0:
-        print(f"⏳ До порога {threshold}% не хватает: {gap:.2f}%")
+    if spread > 0:
+        print(f"\n=== Арбитраж по {pair} ===")
+        print(f"🔻 Купи на {exchange_buy} за {price_buy:.6f}")
+        print(f"🔺 Продай на {exchange_sell} за {price_sell:.6f}")
+        print(f"📊 Спред: {spread:.2f}%")
+        print(f"💰 Валовая прибыль: ${gross:.2f}")
+        print(f"💸 Комиссия: ${fee:.2f}")
+        print(f"{'✅ Чистая прибыль' if net > 0 else '❌ Убыток'}: ${net:.2f}")
+        if gap > 0:
+            print(f"⏳ До порога {threshold}% не хватает: {gap:.2f}%")
 
     # Формат для Telegram
-    if is_alert:
+    if is_alert or spread > 0.3:
         message = (
-            f"💱 Арбитраж {PAIRS}\n\n"
+            f"💱 Арбитраж {pair}\n\n"
             f"🔻 Купил на {exchange_buy} за {price_buy:.6f}\n"
             f"🔺 Продал на {exchange_sell} за {price_sell:.6f}\n\n"
             f"📊 Спред: {spread:.2f}%\n"
@@ -235,9 +233,16 @@ async def log_opportunity(pair, exchange_buy, price_buy, exchange_sell, price_se
 
         await send_alert_with_button(message, {
             "side": f"buy_{exchange_buy.lower()}_sell_{exchange_sell.lower()}",
-            "symbol": PAIRS,
+            "symbol": pair,
             "binance_price": price_buy if exchange_buy == "Binance" else price_sell,
             "bybit_price": price_buy if exchange_buy == "Bybit" else price_sell
         })
 
 
+def get_fee_percent(buy, sell):
+    exchange_fees = {
+        "binance": 0.075,
+        "bybit": 0.1,
+        "kucoin": 0.1
+    }
+    return exchange_fees[buy] + exchange_fees[sell]
