@@ -1,9 +1,9 @@
-import os
 import asyncio
 from dotenv import load_dotenv
-from telegram_bot import send_alert_with_button, telegram_app
-from monitorSocket import check_arbitrage_all
+from monitor_socket_pair import monitor_pair, check_arbitrage_loop, EXCHANGES, PAIRS
 from aiohttp import web
+
+from telegram_bot import telegram_app, send_alert_with_button
 
 load_dotenv()
 
@@ -20,7 +20,7 @@ async def start_web_server():
     await site.start()
 
 async def main():
-    print("🤖 Arbitrage bot started (Binance = read-only, Bybit = trading)...")
+    print("🤖 Arbitrage bot started (WebSockets for each pair/exchange)...")
 
     asyncio.create_task(telegram_app())
     asyncio.create_task(start_web_server())
@@ -34,17 +34,15 @@ async def main():
         "bybit_price": 0
     })
 
-    while True:
-        print("🔄 Проверка арбитража...")
-        try:
-            opportunity = await check_arbitrage_all()
-            if opportunity:
-                message, data = opportunity
-                await send_alert_with_button(message, data)
-        except Exception as e:
-            print(f"⚠️ Ошибка в check_arbitrage_once(): {e}")
+    tasks = []
 
-        await asyncio.sleep(3)
+    for ex in EXCHANGES.values():
+        for pair in PAIRS:
+            tasks.append(asyncio.create_task(monitor_pair(ex, pair)))
 
-if __name__ == "__main__":
+    tasks.append(asyncio.create_task(check_arbitrage_loop()))
+
+    await asyncio.gather(*tasks)
+
+if __name__ == '__main__':
     asyncio.run(main())
