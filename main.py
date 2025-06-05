@@ -1,5 +1,4 @@
 import os
-import time
 import asyncio
 from dotenv import load_dotenv
 from telegram_bot import send_alert_with_button, telegram_app
@@ -7,7 +6,6 @@ from monitorSocket import check_arbitrage_all
 from aiohttp import web
 
 load_dotenv()
-PROXY_URL = os.getenv("PROXY_URL")
 
 # HTTP handler для Render
 async def handle(request):
@@ -23,10 +21,6 @@ async def start_web_server():
 
 async def main():
     print("🤖 Arbitrage bot started (Binance = read-only, Bybit = trading)...")
-    if PROXY_URL:
-        print(f"🌐 Используется прокси: {PROXY_URL}")
-    else:
-        print("⚠️ Прокси не указан, будет прямое подключение.")
 
     asyncio.create_task(telegram_app())
     asyncio.create_task(start_web_server())
@@ -50,7 +44,7 @@ async def main():
         except Exception as e:
             print(f"⚠️ Ошибка в check_arbitrage_once(): {e}")
 
-        await asyncio.sleep(60)
+        await asyncio.sleep(3)
 
 if __name__ == "__main__":
     asyncio.run(main())
