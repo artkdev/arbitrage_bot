@@ -29,9 +29,14 @@ kucoin = ccxt.kucoin({
 })
 
 PAIRS = [
-    "BTC/USDT", "ETH/USDT", "BNB/USDT",
-    # "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "TON/USDT", "DOT/USDT",
-    # "TRX/USDT", "LINK/USDT", "AVAX/USDT", "LTC/USDT", "SHIB/USDT", "NEAR/USDT", "UNI/USDT",
+    #"BTC/USDT", "ETH/USDT", "BNB/USDT",
+    # "SOL/USDT", 
+    "XRP/USDT", 
+    # "ADA/USDT", 
+    "DOGE/USDT", 
+    # "TON/USDT", "DOT/USDT",
+    "TRX/USDT", 
+    #"LINK/USDT", "AVAX/USDT", "LTC/USDT", "SHIB/USDT", "NEAR/USDT", "UNI/USDT",
     #"APT/USDT", "FIL/USDT", "SAND/USDT", 
     "LDO/USDT", 
     #"RUNE/USDT", "FLOW/USDT",
