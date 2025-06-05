@@ -39,6 +39,7 @@ async def get_price(exchange, symbol):
         return None
 
 async def check_arbitrage_all():
+    print("✅ check_arbitrage_all from monitorSocket is running")
     all_opportunities = []
 
     for pair in PAIRS:
