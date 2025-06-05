@@ -97,7 +97,7 @@ async def check_arbitrage_loop():
                         sell = exchange_data[sell_name]
 
                         spread = (sell['bid'] - buy['ask']) / buy['ask'] * 100
-                        if spread > 0.01:
+                        if spread > 0.4:
                             key = f"{pair}:{buy_name}->{sell_name}"
                             value = (buy['ask'], sell['bid'])
                             if last_opportunities.get(key) == value:
