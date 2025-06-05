@@ -81,7 +81,7 @@ async def monitor_pair(exchange, symbol):
 
 async def check_arbitrage_loop():
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         for pair in PAIRS:
             try:
                 exchange_data = {name: prices[name].get(pair) for name in EXCHANGES}
@@ -97,7 +97,7 @@ async def check_arbitrage_loop():
                         sell = exchange_data[sell_name]
 
                         spread = (sell['bid'] - buy['ask']) / buy['ask'] * 100
-                        if spread > 0.4:
+                        if spread > 0.01:
                             key = f"{pair}:{buy_name}->{sell_name}"
                             value = (buy['ask'], sell['bid'])
                             if last_opportunities.get(key) == value:
