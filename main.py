@@ -3,7 +3,7 @@ import time
 import asyncio
 from dotenv import load_dotenv
 from telegram_bot import send_alert_with_button, telegram_app
-from monitor import check_arbitrage_all
+from monitorSocket import check_arbitrage_all
 from aiohttp import web
 
 load_dotenv()

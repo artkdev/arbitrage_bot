@@ -1,106 +1,41 @@
-import ccxt
-from ccxt import kucoin
+import ccxt.async_support as ccxt
 from dotenv import load_dotenv
-import requests
 import os
 from telegram_bot import send_alert_with_button
 
 load_dotenv()
 
-binance = ccxt.binance({
-    'apiKey': os.getenv("BINANCE_API_KEY"),
-    'secret': os.getenv("BINANCE_API_SECRET"),
-})
-
-bybit = ccxt.bybit({
-    'apiKey': os.getenv("BYBIT_API_KEY"),
-    'secret': os.getenv("BYBIT_API_SECRET"),
-})
-
-kucoin = ccxt.kucoin({
-    'apiKey': os.getenv("KUCOIN_API_KEY"),
-    'secret': os.getenv("KUCOIN_API_SECRET"),
-})
-#, "MATICUSDT"
-#, "RNDRUSDT"
-#, "FTMUSDT"
 PAIRS = [
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "TONUSDT", "DOTUSDT",
-    "TRXUSDT", "LINKUSDT", "AVAXUSDT", "LTCUSDT", "SHIBUSDT", "NEARUSDT", "UNIUSDT",
-    "APTUSDT", "FILUSDT", "SANDUSDT", "LDOUSDT", "RUNEUSDT", "FLOWUSDT",
-    "IDUSDT", "CYBERUSDT", "OPUSDT", "SUIUSDT", "PEPEUSDT"
+    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "TON/USDT", "DOT/USDT",
+    "TRX/USDT", "LINK/USDT", "AVAX/USDT", "LTC/USDT", "SHIB/USDT", "NEAR/USDT", "UNI/USDT",
+    "APT/USDT", "FIL/USDT", "SAND/USDT", "LDO/USDT", "RUNE/USDT", "FLOW/USDT",
+    "ID/USDT", "CYBER/USDT", "OP/USDT", "SUI/USDT", "PEPE/USDT"
 ]
 
-EXCHANGES = ["binance", "bybit", "kucoin"]
+EXCHANGES = {
+    "binance": binance,
+    "bybit": bybit,
+    "kucoin": kucoin
+}
 
 SPREAD_THRESHOLD = 0.5  # in percent
 CAPITAL = 1000
-FEE_BINANCE = 0.075
-FEE_BYBIT = 0.1
 
 async def get_price(exchange, symbol):
-    proxies = {}
-    proxy_url = os.getenv("PROXY_URL")
-
-    if proxy_url:
-        proxies = {"http": proxy_url, "https": proxy_url}
-    else:
-        proxies = None
-
     try:
-        if exchange == "binance":
-            url = f"https://api.binance.com/api/v3/ticker/bookTicker?symbol={symbol}"
-            response = requests.get(url, proxies=proxies, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-
-            return {
-                "last": float(data["bidPrice"]),
-                "bid": float(data["bidPrice"]),
-                "ask": float(data["askPrice"])
-            }
-
-        elif exchange == "bybit":
-            url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
-            response = requests.get(url, proxies=proxies, timeout=10)
-            response.raise_for_status()
-            result = response.json().get("result")
-            if not result or "list" not in result or not result["list"]:
-                raise ValueError(f"Bybit: нет данных для {symbol}")
-
-            data = result["list"][0]
-
-            return {
-                "last": float(data["lastPrice"]),
-                "bid": float(data["bid1Price"]),
-                "ask": float(data["ask1Price"])
-            }
-
-        elif exchange == "kucoin":
-            symbol = symbol.replace("USDT", "-USDT")  # KuCoin формат
-            url = f"https://api.kucoin.com/api/v1/market/orderbook/level1?symbol={symbol}"
-            res = requests.get(url, timeout=10)
-            res.raise_for_status()
-
-            json_data = res.json()
-            if not json_data or not json_data.get("data"):
-                raise ValueError(f"Нет данных от KuCoin для {symbol}")
-            data = json_data["data"]
-            return {
-                "bid": float(data["bestBid"]),
-                "ask": float(data["bestAsk"])
-            }
-
-        else:
-            raise ValueError("Неизвестная биржа")
-
+        exchange_map = {
+            "binance": binance,
+            "bybit": bybit,
+            "kucoin": kucoin
+        }
+        ccxt_exchange = exchange_map[exchange]
+        ticker = await ccxt_exchange.watch_ticker(symbol)
+        return {
+            "bid": float(ticker["bid"]),
+            "ask": float(ticker["ask"])
+        }
     except Exception as e:
-        await send_alert_with_button(f"❌ Ошибка {exchange}: {e}", {
-            "side": "log",
-            "symbol": symbol,
-            "binance_price": 0,
-            "bybit_price": 0
-        })
+        print(f"WebSocket Error on {exchange} {symbol}: {e}")
         return None
 
 async def check_arbitrage_all():
@@ -108,14 +43,12 @@ async def check_arbitrage_all():
 
     for pair in PAIRS:
         prices = {}
-        for exchange in EXCHANGES:
-            prices[exchange] = await get_price(exchange, pair)
+        for name in EXCHANGES:
+            prices[name] = await get_price(name, pair)
 
         for buy in EXCHANGES:
             for sell in EXCHANGES:
-                if buy == sell:
-                    continue
-                if prices[buy] is None or prices[sell] is None:
+                if buy == sell or not prices[buy] or not prices[sell]:
                     continue
 
                 price_buy = prices[buy]["ask"]
@@ -123,7 +56,7 @@ async def check_arbitrage_all():
                 spread = (price_sell - price_buy) / price_buy * 100
 
                 gross = (CAPITAL / 2) * spread / 100
-                fee = CAPITAL * (FEE_BINANCE + FEE_BYBIT) / 100
+                fee = CAPITAL * get_fee_percent(buy, sell) / 100
                 net = gross - fee
 
                 all_opportunities.append({
@@ -138,7 +71,6 @@ async def check_arbitrage_all():
                     "net": net
                 })
 
-    # ✅ Сортировка по убыванию спреда и вывод только 3 лучших
     top_opportunities = sorted(all_opportunities, key=lambda x: x["spread"], reverse=True)[:3]
 
     for opp in top_opportunities:
@@ -153,7 +85,6 @@ async def check_arbitrage_all():
             capital=CAPITAL,
             is_alert=(opp["spread"] >= SPREAD_THRESHOLD or opp["spread"] > 0.25)
         )
-
 
 
 async def log_opportunity(pair, exchange_buy, price_buy, exchange_sell, price_sell, spread, threshold, capital, is_alert=False):
@@ -199,6 +130,6 @@ def get_fee_percent(buy, sell):
     exchange_fees = {
         "binance": 0.075,
         "bybit": 0.1,
-        "kucoin": 0.1
+        "kucoin": 0.08
     }
     return exchange_fees[buy] + exchange_fees[sell]

@@ -1,0 +1,9 @@
+[program:arbitrage_bot]
+directory=/path/to/project
+command=/path/to/project/venv/bin/python main.py
+autostart=true
+autorestart=true
+stderr_logfile=/path/to/project/logs/bot.err.log
+stdout_logfile=/path/to/project/logs/bot.out.log
+environment=PYTHONUNBUFFERED=1
+user=your-username
