@@ -1,10 +1,12 @@
 import asyncio
 from dotenv import load_dotenv
-from monitor_socket_pair import monitor_pair, check_arbitrage_loop, EXCHANGES, PAIRS
+from classes.deal_tracker import DealTracker
+from classes.rebalancer import Rebalancer
+from classes.trade_executor import TradeExecutor
+from monitor_socket_pair import monitor_pair, check_arbitrage_loop, EXCHANGES, PAIRS, prices
 from aiohttp import web
 
 from telegram_bot import telegram_app, send_alert_with_button
-from trading import DealTracker, Rebalancer, TradeExecutor, prices
 
 load_dotenv()
 
