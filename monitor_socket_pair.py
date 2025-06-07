@@ -4,6 +4,7 @@ import os
 import asyncio
 from telegram_bot import send_alert_with_button
 from collections import defaultdict
+from trade_logger import log_trade_to_file
 
 load_dotenv()
 
@@ -55,7 +56,7 @@ EXCHANGES = {
 prices = defaultdict(dict)
 
 CAPITAL = 1000
-SPREAD_THRESHOLD = 0.5
+SPREAD_THRESHOLD = 0.7
 last_opportunities = {}
 
 def get_fee_percent(buy, sell):
@@ -84,52 +85,66 @@ async def monitor_pair(exchange, symbol):
             print(f"❌ WebSocket error {exchange.id} {symbol}: {e}")
             await asyncio.sleep(1)
 
-async def check_arbitrage_loop():
+async def check_arbitrage_loop(detector):
     while True:
         await asyncio.sleep(1)
         for pair in PAIRS:
             try:
-                exchange_data = {name: prices[name].get(pair) for name in EXCHANGES}
-                if any(v is None for v in exchange_data.values()):
-                    continue
-
-                for buy_name in EXCHANGES:
-                    for sell_name in EXCHANGES:
-                        if buy_name == sell_name:
-                            continue
-
-                        buy = exchange_data[buy_name]
-                        sell = exchange_data[sell_name]
-
-                        spread = (sell['bid'] - buy['ask']) / buy['ask'] * 100
-                        if spread > 0.4:
-                            key = f"{pair}:{buy_name}->{sell_name}"
-                            value = (buy['ask'], sell['bid'])
-                            if last_opportunities.get(key) == value:
-                                continue
-                            last_opportunities[key] = value
-
-                            gross, fee, net = log_opportunity(pair, buy_name, buy['ask'], sell_name, sell['bid'],
-                                                              spread)
-
-                            await send_alert_with_button(
-                                f"💱 Арбитраж {pair}\n\n"
-                                f"🔻 Купил на {buy_name} за {buy['ask']:.6f}\n"
-                                f"🔺 Продал на {sell_name} за {sell['bid']:.6f}\n\n"
-                                f"📊 Спред: {spread:.2f}%\n"
-                                f"💰 Валовая прибыль: ${gross:.2f}\n"
-                                f"💸 Комиссия: ${fee:.2f}\n"
-                                f"{'✅ Чистая прибыль' if net > 0 else '❌ Убыток'}: ${net:.2f}",
-                                {
-                                    "side": "arbitrage",
-                                    "symbol": pair,
-                                    "binance_price": prices["binance"].get(pair, {}).get("bid"),
-                                    "bybit_price": prices["bybit"].get(pair, {}).get("ask")
-                                }
-                            )
+                await process_pair_arbitrage(pair, detector)
             except Exception as e:
                 print(f"⚠️ Ошибка в расчёте арбитража: {e}")
 
+async def process_pair_arbitrage(pair, detector):
+    exchange_data = {name: prices[name].get(pair) for name in EXCHANGES}
+    if any(v is None for v in exchange_data.values()):
+        return
+    for buy_name, sell_name in get_exchange_pairs():
+        buy = exchange_data[buy_name]
+        sell = exchange_data[sell_name]
+        if not buy or not sell:
+            continue
+        spread = calculate_spread(buy['ask'], sell['bid'])
+        if spread > SPREAD_THRESHOLD:
+            if not is_new_opportunity(pair, buy_name, sell_name, buy['ask'], sell['bid']):
+                continue
+            gross, fee, net = log_opportunity(pair, buy_name, buy['ask'], sell_name, sell['bid'], spread)
+            log_trade_to_file(pair, buy_name, buy['ask'], sell_name, sell['bid'], spread, gross, fee, net, "OPEN")
+            await send_arbitrage_alert(pair, buy_name, buy['ask'], sell_name, sell['bid'], spread, gross, fee, net)
+            await detector.execute(pair, buy_name, sell_name, buy['ask'], sell['bid'])
+
+def get_exchange_pairs():
+    for buy_name in EXCHANGES:
+        for sell_name in EXCHANGES:
+            if buy_name != sell_name:
+                yield buy_name, sell_name
+
+def calculate_spread(buy_ask, sell_bid):
+    return (sell_bid - buy_ask) / buy_ask * 100
+
+def is_new_opportunity(pair, buy_name, sell_name, buy_ask, sell_bid):
+    key = f"{pair}:{buy_name}->{sell_name}"
+    value = (buy_ask, sell_bid)
+    if last_opportunities.get(key) == value:
+        return False
+    last_opportunities[key] = value
+    return True
+
+async def send_arbitrage_alert(pair, buy_name, buy_ask, sell_name, sell_bid, spread, gross, fee, net):
+    await send_alert_with_button(
+        f"💱 Арбитраж {pair}\n\n"
+        f"🔻 Купил на {buy_name} за {buy_ask:.6f}\n"
+        f"🔺 Продал на {sell_name} за {sell_bid:.6f}\n\n"
+        f"📊 Спред: {spread:.2f}%\n"
+        f"💰 Валовая прибыль: ${gross:.2f}\n"
+        f"💸 Комиссия: ${fee:.2f}\n"
+        f"{'✅ Чистая прибыль' if net > 0 else '❌ Убыток'}: ${net:.2f}",
+        {
+            "side": "arbitrage",
+            "symbol": pair,
+            "binance_price": prices["binance"].get(pair, {}).get("bid"),
+            "bybit_price": prices["bybit"].get(pair, {}).get("ask")
+        }
+    )
 
 def log_opportunity(pair, buy_name, buy_price, sell_name, sell_price, spread):
     working_capital = CAPITAL / 2

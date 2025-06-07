@@ -4,6 +4,7 @@ from monitor_socket_pair import monitor_pair, check_arbitrage_loop, EXCHANGES, P
 from aiohttp import web
 
 from telegram_bot import telegram_app, send_alert_with_button
+from trading import DealTracker, Rebalancer, TradeExecutor, prices
 
 load_dotenv()
 
@@ -33,6 +34,10 @@ async def main():
         "binance_price": 0,
         "bybit_price": 0
     })
+    
+    tracker = DealTracker()
+    detector = TradeExecutor(tracker)
+    rebalancer = Rebalancer(tracker, prices)
 
     tasks = []
 
@@ -40,9 +45,15 @@ async def main():
         for pair in PAIRS:
             tasks.append(asyncio.create_task(monitor_pair(ex, pair)))
 
-    tasks.append(asyncio.create_task(check_arbitrage_loop()))
+    tasks.append(asyncio.create_task(check_arbitrage_loop(detector)))
+    tasks.append(asyncio.create_task(rebalancer_loop(rebalancer)))
 
     await asyncio.gather(*tasks)
+
+async def rebalancer_loop(rebalancer):
+    while True:
+        await asyncio.sleep(5)
+        await rebalancer.check()
 
 if __name__ == '__main__':
     asyncio.run(main())
