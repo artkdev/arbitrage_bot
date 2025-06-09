@@ -199,23 +199,11 @@ async def handle_opportunity(pair, buy_name, sell_name, buy, sell, spread, detec
 
     gross, fee, net = log_opportunity(pair, buy_name, buy['ask'], sell_name, sell['bid'], spread)
 
-    await send_alert_with_button(
-        f"💱 Арбитраж {pair}\n\n"
-        f"🔻 Купил на {buy_name} за {buy['ask']:.6f}\n"
-        f"🔺 Продал на {sell_name} за {sell['bid']:.6f}\n\n"
-        f"📊 Спред: {spread:.2f}%\n"
-        f"💰 Валовая прибыль: ${gross:.2f}\n"
-        f"💸 Комиссия: ${fee:.2f}\n"
-        f"{'✅ Чистая прибыль' if net > 0 else '❌ Убыток'}: ${net:.2f}",
-        {
-            "side": "arbitrage",
-            "symbol": pair,
-            "binance_price": prices["binance"].get(pair, {}).get("bid"),
-            "bybit_price": prices["bybit"].get(pair, {}).get("ask")
-        }
-    )
+    await send_arbitrage_alert(pair, buy_name, buy['ask'], sell_name, sell['bid'], spread, gross, fee, net)
+    log_trade_to_file(pair, buy_name, buy['ask'], sell_name, sell['bid'], spread, gross, fee, net, "OPEN")
 
-    await detector.execute(pair, buy_name, sell_name, buy['ask'], sell['bid'])
+    if pair == "CYBER/USDT":
+        await detector.execute(pair, buy_name, sell_name, buy['ask'], sell['bid'])
 
 def opportunity_key_value(pair, buy_name, sell_name, buy, sell):
     key = f"{pair}:{buy_name}->{sell_name}"
