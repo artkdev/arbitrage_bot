@@ -30,23 +30,24 @@ kucoin = ccxt.kucoin({
 })
 
 PAIRS = [
-    #"BTC/USDT", "ETH/USDT", "BNB/USDT",
-    # "SOL/USDT", 
+    #"BTC/USDT", "ETH/USDT", "BNB/USDT","SOL/USDT", 
     "XRP/USDT", 
     # "ADA/USDT", 
     "DOGE/USDT", 
     # "TON/USDT", "DOT/USDT",
     "TRX/USDT", 
-    #"LINK/USDT", 
-    # "AVAX/USDT", "LTC/USDT",
-    # "SHIB/USDT", "NEAR/USDT", "UNI/USDT",
-    #"APT/USDT", "FIL/USDT", "SAND/USDT", 
+    #"LINK/USDT", "AVAX/USDT", "LTC/USDT", "SHIB/USDT", "NEAR/USDT", "UNI/USDT", "APT/USDT", "FIL/USDT", "SAND/USDT", 
     "LDO/USDT", 
     #"RUNE/USDT", "FLOW/USDT",
     "ID/USDT",
     "CYBER/USDT", 
     #"OP/USDT", "SUI/USDT", "PEPE/USDT"
 ]
+ENTRY_LIMITS = {
+    "binance": 40,
+    "bybit": 50,
+    "kucoin": 40
+}
 
 EXCHANGES = {
     "binance": binance,
@@ -57,7 +58,7 @@ EXCHANGES = {
 # Хранилище цен: prices[exchange_id][symbol] = {bid, ask}
 prices = defaultdict(dict)
 
-CAPITAL = 1000
+CAPITAL = 150
 SPREAD_THRESHOLD = 0.7
 last_opportunities = {}
 
@@ -168,10 +169,12 @@ async def send_arbitrage_alert(pair, buy_name, buy_ask, sell_name, sell_bid, spr
     )
 
 def log_opportunity(pair, buy_name, buy_price, sell_name, sell_price, spread):
-    working_capital = CAPITAL / 2
-    gross = working_capital * spread / 100
+    # 💰 Используем минимальный лимит на сделку между биржами
+    entry_amount = min(ENTRY_LIMITS[buy_name], ENTRY_LIMITS[sell_name])
     fee_percent = get_fee_percent(buy_name, sell_name)
-    fee = CAPITAL * fee_percent / 100
+
+    gross = entry_amount * spread / 100
+    fee = entry_amount * fee_percent / 100
     net = gross - fee
     gap = SPREAD_THRESHOLD - spread
 
@@ -184,6 +187,7 @@ def log_opportunity(pair, buy_name, buy_price, sell_name, sell_price, spread):
     print(f"{'✅ Чистая прибыль' if net > 0 else '❌ Убыток'}: ${net:.2f}")
     if gap > 0:
         print(f"⏳ До порога {SPREAD_THRESHOLD}% не хватает: {gap:.2f}%")
+
     return gross, fee, net
 
 

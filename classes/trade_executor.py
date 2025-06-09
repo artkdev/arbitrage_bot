@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 
-from monitor_socket_pair import CAPITAL, EXCHANGES
+from monitor_socket_pair import ENTRY_LIMITS, EXCHANGES
 
 class TradeExecutor:
     def __init__(self, tracker):
@@ -14,7 +14,9 @@ class TradeExecutor:
         print(f"🚀 Исполнение ордеров на {buy_name} и {sell_name} для {pair}")
         exchange_buy = EXCHANGES[buy_name]
         exchange_sell = EXCHANGES[sell_name]
-        amount = CAPITAL / 2 / buy_price
+
+        entry_amount = min(ENTRY_LIMITS[buy_name], ENTRY_LIMITS[sell_name])  # 💡 безопасная сумма
+        amount = entry_amount / buy_price  # кол-во токенов, которое можно купить
 
         buy_task = asyncio.create_task(exchange_buy.create_limit_buy_order(pair, amount, buy_price))
         sell_task = asyncio.create_task(exchange_sell.create_limit_sell_order(pair, amount, sell_price))
@@ -32,8 +34,10 @@ class TradeExecutor:
                 "sell_exchange": sell_name,
                 "buy_price": buy_price,
                 "sell_price": sell_price,
+                "entry_amount": entry_amount,
+                "hedge_amount": 0,
                 "status": "open",
-                "timestamp": datetime.now()
+                "timestamp": datetime.datetime.now()
             })
             print(f"✅ Сделка открыта по {pair}")
         else:
